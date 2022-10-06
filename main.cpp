@@ -1,391 +1,425 @@
-#include <SFML/Graphics.hpp>
-#include <SFML/System.hpp>
 #include <iostream>
-#include <cmath>
+#include <vector>
 #include <algorithm>
-#include <queue>
-#include <stdio.h>
-#include <stdlib.h>
+#include <cmath>
 #include <time.h>
+#include <SFML/Graphics.hpp>
+#include <chrono>
+#include <thread>
 
+#define EXPONENT 2.71828182846
+#define SPEED_LEARNING 0.0000001
+#define GRAN_LEARN 0.001
+#define ZOOM 5
+#define HEIGHT 800
+#define LENGTH 1500
 
-//_____________ОКНО______________________________
-#define WINDOW_HEIGHT 720			// высотса окна
-#define WINDOW_LENGTH 1280			// длинна окна	
-#define TICK 0.001f					// тик
-#define G 2400						// ускорение свободного падения
-#define PI 3.1415926536				// пи оно и в африке пи
-#define PIXEL 4						// размер одного пикселя в рубах и птице
-//_____________ПТИЦ_______________________________
-#define JUMP_VELOCITY -700			// скорость птицы при прыжке
-#define MAX_ROTATION 90				// максимальный угол наклона морды птицы
-#define MIN_ROTATION -30			// минимальный угол наклона морды птицы
-#define VELOCITY_ANGLE 500			// скорость изменения наклона морды
-#define VELOCITY_GRAN 400			// скорость после которой морда начинает наклонятся
-//_____________ТРУБЫ_____________________________
-#define VELOCITY_PIPE -300			// скорость труб
-#define MIN_DISTANCE_TO_WINDOW 200	// минимальное рассояние между центром проёма и границей окна
-#define STARTING_DISTANCE -500		// расстояния от первой рубы до начала экрана(зависит от времяни перед началом игры)
-#define DISTANCE_BETWEEN_PIPES 300	// расстояние через которые идут пары труб 
-#define HOLE_HEIGHT 200				// ... высота проёма, в котороё должно пролететь птица
 
 using namespace std;
+using namespace std::this_thread; // sleep_for, sleep_until
+using namespace std::chrono; // nanoseconds, system_clock, seconds
 
-//для меня
-const bool otladka = false;
-//////////////////////////
-const int high_grass = 50;
- 
-//_____________ФУНКЦИИ______________
-void stop_all_pipes();
-/*
-bool touch(flappy_bird &b, pipe &p);
-void bird_vresols(flappy_bird &b);
-void generate_pipe();
-void delete_pipe();
-void delete_all_pipes();
-void stop_all_pipes();
-void update_all_pipes();
-void draw_all_pipes();
-void next_tick();
-void restart();
-*/
-//__________________________________
-// 1280 * 720
 
-sf::RenderWindow window(sf::VideoMode(WINDOW_LENGTH, WINDOW_HEIGHT), "Flappy bird");
+sf::RenderWindow window(sf::VideoMode(LENGTH, HEIGHT), "SFML works!");
+sf::CircleShape shape(1.f);
 
-struct flappy_bird
+vector<int> str{ 1, 10, 10, 1 };
+vector<long double> parametr{ 1, 5, 10 , 80 };
+vector<long double> ans{ 1, 23.9, 5, 69 };
+
+long double fun(long double x)
 {
-	// птица имеет размеры 17 * 12 пикселей
-	const double high = 12 * PIXEL;
-	const double lenth = 17 * PIXEL;
-	double velocity_x, velocity_y;
-	double center_x, center_y;
-	double rotation;
-	bool alive;
-	sf::Color c;
-	sf::RectangleShape shape;
-	sf::Texture texture;
-	flappy_bird() {
-		rotation = 0;
-		velocity_x = 0;
-		velocity_y = 0;
-		center_x = WINDOW_LENGTH / 2;
-		center_y = WINDOW_HEIGHT / 2;
-		alive = true;
+	return max(x, long double(0));
+}
 
-		sf::Texture bird_textureBuffer;
-		if (!bird_textureBuffer.loadFromFile("resources/FlappyBird_Bird.png"))
+void print_vector(vector<long double> v)
+{
+	cout << "[";
+	for (int i = 0; i < v.size(); ++i)
+		if (i == v.size() - 1)
+			cout << v[i];
+		else
+			cout << v[i] << ", ";
+	cout << "]";
+}
+
+struct network {
+
+	vector<vector<long double>> value;
+	vector<vector<long double>> bias;
+	vector<vector<long double>> delta;
+
+	vector<vector<vector<long double>>> w;
+
+	network(vector<int> v) {
+
+		value.resize(v.size());
+		for (int i = 0; i < v.size(); ++i)
+			value[i].resize(v[i], 0);
+
+		bias.resize(v.size());
+		for (int i = 0; i < bias.size(); ++i)
+			bias[i].resize(v[i], 0);
+
+		delta.resize(v.size());
+		for (int i = 0; i < delta.size(); ++i)
+			delta[i].resize(v[i], 0);
+
+		w.resize(v.size() - 1);
+		for (int i = 0; i < w.size(); ++i)
 		{
-			cout << "PTITA NE ZAGRUZILOS!!!!";
+			w[i].resize(v[i]);
+			for (int j = 0; j < w[i].size(); ++j)
+				w[i][j].resize(v[i + 1]);
 		}
-		texture = bird_textureBuffer;
 
-		c = sf::Color(0, 0, 255);
-		shape.setPosition(center_x - lenth / 2, center_y - high / 2);
-		shape.setSize(sf::Vector2f(lenth, high));
-		shape.setTexture(&texture);
-		shape.setRotation(0);
-	} 
-	void draw() {
-		//_______расчёт левого верхнего угла прямоугольника т к а=поворот делается относительно него
-		double b = atan2(high, lenth);
-		double a = rotation / 180 * PI;
-		double gipotenuza = sqrt(high * high + lenth * lenth) / 2;
-		double corner_x = center_x + gipotenuza * cos(a + b + PI);
-		double corner_y = center_y + gipotenuza * sin(a + b + PI);
-		//________рисуем птицу____________________
-		shape.setPosition(corner_x, corner_y);
-		shape.setRotation(rotation);
-		window.draw(shape);
+		generateRandomBias();
+		generateRandomW();
+	}
+
+	void generateRandomW()
+	{
+		for (int i = 0; i < w.size(); ++i)
+			for (int j = 0; j < w[i].size(); ++j)
+				for (int k = 0; k < w[i][j].size(); ++k)
+					w[i][j][k] = rand() % 5 -2;
+
 		return;
 	}
-	void next_tick() {
-		//___________расчёт положение птицы_______________
-		if (velocity_y > VELOCITY_GRAN) {
-			rotation = min(double(MAX_ROTATION), rotation + TICK * VELOCITY_ANGLE);
-		}
-		center_y = center_y + velocity_y * TICK + ((G * TICK * TICK) / 2.0f);
-		velocity_y = velocity_y + G * TICK;
-		center_x = center_x + velocity_x * TICK;
-		if (center_x > WINDOW_LENGTH) {
-			velocity_x = -abs(velocity_x);
-		}
-		if (center_x < 0) {
-			velocity_x = abs(velocity_x);
-		}
-		if (center_y > WINDOW_HEIGHT - high /2) {
-			velocity_y = -abs(velocity_y);
-		} 
+	void generateRandomBias()
+	{
+		for (int i = 0; i < bias.size(); ++i)
+			for (int j = 0; j < bias[i].size(); ++j)
+				bias[i][j] = rand() % 10 - 5;
+				
 		return;
 	}
-	void jump() {
-		if (alive == true || otladka == true) {
-			velocity_y = JUMP_VELOCITY;
-			rotation = MIN_ROTATION;
-		}
-		return;
-	}
-	void die() {
-		if (alive == true) {
-			this->jump();
-			alive = false;
-			c = sf::Color::Red;
-		}
-		return;
-	}
-	void reset() {
-		rotation = 0;
-		velocity_x = 0;
-		velocity_y = 0;
-		center_x = WINDOW_LENGTH / 2;
-		center_y = WINDOW_HEIGHT / 2;
-		alive = true;
 
-		c = sf::Color(0, 0, 255);
-		shape.setPosition(center_x - lenth / 2, center_y - high / 2);
-		shape.setSize(sf::Vector2f(lenth, high));
-		shape.setTexture(&texture);
-		shape.setRotation(0);
-	}
-};
-// птица готова
-
-
-struct pipe {
-	// 26 159 пикселей
-	const double high = 159 * PIXEL;
-	const double lenth = 26 * PIXEL;
-	double x1, y1, x2, y2;
-	double velocity_x;
-	bool type; // 0 - нижняя труба 1 - верхняя 
-	sf::RectangleShape shape;
-	sf::Texture texture;
-	pipe(double _x1, double _y1, bool _type) {
-		type = _type;
-		if (type == 0){
-			x1 = _x1;
-			x2 = _x1 + lenth;
-			y1 = _y1;
-			y2 = y1 + high;
-			velocity_x = VELOCITY_PIPE;
-
-			sf::Texture pipe_textureBuffer;
-			if (!pipe_textureBuffer.loadFromFile("resources/FlappyBird_LowerPipe.png"))
+	void print_neuron(int x, int y)
+	{
+		cout << "Neuron (" << x << ", " << y << ")";
+		cout << " value = " << value[x][y] << " ; ";
+		cout << "weights : [";
+		if (x < w.size()) {
+			for (int k = 0; k < w[x][y].size(); ++k)
 			{
-				cout << "TRUBA NE ZAGRUZILOS!!!!";
+				if (k == w[x][y].size() - 1)
+					cout << w[x][y][k];
+				else
+					cout << w[x][y][k] << ", ";
 			}
-			texture = pipe_textureBuffer;
-			shape.setPosition(x1, y1);
-			shape.setSize(sf::Vector2f(lenth, high));
-			shape.setTexture(&texture);
 		}
-		else {
-			x1 = _x1;
-			x2 = _x1 + lenth;
-			y2 = _y1;
-			y1 = y2 - high;
-			velocity_x = VELOCITY_PIPE;
-
-			sf::Texture pipe_textureBuffer;
-			if (!pipe_textureBuffer.loadFromFile("resources/FlappyBird_UpperPipe.png"))
-			{
-				cout << "TRUBA NE ZAGRUZILOS!!!!";
-			}
-			texture = pipe_textureBuffer;
-			shape.setPosition(x1, y1);
-			shape.setSize(sf::Vector2f(lenth, high));
-			shape.setTexture(&texture);
-		}
-	}
-	void draw() {
-		//shape.setTexture(&texture);
-		shape.setPosition(x1, y1);
-		window.draw(shape);
+		cout << "] ;";
+		cout << "\t bias = " << bias[x][y];
+		cout << endl;
 
 		return;
 	}
-	void next_tick() {
-		x1 = x1 + velocity_x * TICK;
-		x2 = x1 + lenth;
+	void print_line(int x)
+	{
+		cout << "Line = " << x << " : (" << endl;
+		for (int i = 0; i < value[x].size(); ++i)
+			print_neuron(x, i);
+		cout << ")" << endl;
+
 		return;
 	}
-	void stop() {
-		velocity_x = 0.0f;
+	void print_network()
+	{
+
+		window.clear();
+
+		shape.setRadius(2);
+		shape.setFillColor(sf::Color::Green);
+
+		for (long double i = 0; i < LENGTH; i += 1)
+		{
+			long double x = (i - LENGTH / 2) / ZOOM;
+			long double y = function({ x })[0];
+			shape.setPosition(x * ZOOM + LENGTH / 2, HEIGHT / 2 - y * ZOOM);
+			window.draw(shape);
+		}
+
+		shape.setRadius(3.2f);
+		shape.setFillColor(sf::Color::Red);
+
+		for (int i = 0; i < parametr.size(); ++i)
+		{
+			long double x = parametr[i];
+			long double y = ans[i];
+			shape.setPosition(x * ZOOM + LENGTH / 2 - shape.getRadius() / 2, HEIGHT / 2 - y * ZOOM - shape.getRadius() / 2);
+			window.draw(shape);
+		}
+
+		//sleep_for(100ms);
+
+		window.display();
+		/*
+		cout << "Network : {" << endl << endl;
+		for (int i = 0; i < value.size(); ++i)
+			print_line(i);
+		cout << endl;
+		cout << "}   <---- This my network ^_^";
+		cout << endl;
+		*/
+	}
+
+	void print_answer()
+	{
+		cout << "Answer = [";
+
+		for (int i = 0; i < value.back().size(); ++i)
+		{
+			if (i == value.back().size() - 1)
+				cout << value.back()[i];
+			else
+				cout << value.back()[i] << ", ";
+		}
+
+		cout << "]" << endl;
+
 		return;
 	}
+
+	void clear_delta()
+	{
+		for (int i = 0; i < delta.size(); ++i)
+			for (int j = 0; j < delta[i].size(); ++j)
+				delta[i][j] = 0;
+
+		return;
+	}
+
+	void setInput(vector<long double> v)
+	{
+		value[0] = v;
+
+		return;
+	}
+	void setAnswer(vector<long double>& v)
+	{
+		if (v.size() != delta.back().size())
+		{
+			cout << "ALARM!!! OUT OF RANGE ANSWER -_-" << endl;
+			return;
+		}
+
+		for (int i = 0; i < v.size(); ++i)
+		{
+			delta.back()[i] = (value.back()[i] - v[i]);
+		}
+	}
+
+	vector<long double> getAnswer()
+	{
+		return value.back();
+	}
+
+	void calculate_neuron(int& x, int& y)
+	{
+		value[x][y] = 0;
+		for (int i = 0; i < value[x - 1].size(); ++i) {
+			value[x][y] += value[x - 1][i] * w[x - 1][i][y];
+		}
+		value[x][y] += bias[x][y];
+
+		value[x][y] = fun((value[x][y]));
+
+		return;
+	}
+	void calculate_line(int x)
+	{
+		for (int i = 0; i < value[x].size(); ++i)
+			calculate_neuron(x, i);
+
+		return;
+	}
+	void calculate_network()
+	{
+
+		//setInput(v);
+
+		for (int i = 1; i < value.size(); ++i)
+			calculate_line(i);
+
+		return;
+	}
+
+	void update_neuron(int& x, int& y)
+	{
+		if (x == 0)
+			return;
+
+		for (int i = 0; i < w[x - 1].size(); ++i)
+		{
+			delta[x - 1][i] += w[x-1][i][y]*delta[x][y];
+			w[x - 1][i][y] -= value[x - 1][i] * delta[x][y] * SPEED_LEARNING;
+			//cout << w[x - 1][i][y] << endl;
+
+
+		}
+
+		bias[x][y] -= delta[x][y] * SPEED_LEARNING;
+
+		return;
+	}
+	void update_line(int& x)
+	{
+		for (int i = 0; i < value[x].size(); ++i)
+			update_neuron(x, i);
+
+		return;
+	}
+	void update_network()
+	{
+		for (int i = value.size() - 1; i > 0; --i)
+			update_line(i);
+
+		return;
+	}
+
+	long long learn(vector<long double> v, vector<long double> ans)
+	{
+		setInput(v);
+		calculate_network();
+		clear_delta();
+		setAnswer(ans);
+		long long st = 0;
+		long long bred = rand() % 200 + 10;
+		bred = 3000;
+		while (!is_right())
+		{
+			//if (st % 2000 == 0 && st != 0)
+				//print_network();
+			//cout << "< " << getMistake() << " >" << endl;
+			//if (st % 50000 == 0 && st != 0)
+				//print_network();
+			++st;
+			update_network();
+			calculate_network();
+			clear_delta();
+			setAnswer(ans);
+			if (st >= bred)
+				break;
+		}
+		return st;
+	}
+
+	long double getMistake()
+	{
+		long double mistake = 0;
+		for (int i = 0; i < delta.back().size(); ++i)
+			mistake += delta.back()[i];
+		return mistake;
+	}
+
+	bool is_right()
+	{
+		long double mistake = 0;
+		for (int i = 0; i < delta.back().size(); ++i)
+			mistake += delta.back()[i] * delta.back()[i];
+
+		return (mistake < GRAN_LEARN);
+
+	}
+
+	vector<long double> function(vector<long double> v)
+	{
+		setInput(v);
+		calculate_network();
+		return getAnswer();
+	}
+
 };
-
-flappy_bird bird;
-queue <pipe> pipes;
-
-bool touch(flappy_bird &b, pipe &p) {
-	double x1, y1, x2, y2;
-	x1 = p.x1 - b.lenth / 2;
-	x2 = p.x2 + b.lenth / 2;
-	y1 = p.y1 - b.high / 2;
-	y2 = p.y2 + b.high / 2;
-	if (x1 < b.center_x && b.center_x < x2 && y1 < b.center_y && b.center_y < y2) {
-		return true;
-	}
-	return false;
-}
-
-void bird_vresols(flappy_bird &b) {
-	bool ans = false;
-	for (int i = 0; i < pipes.size(); ++i) {
-		if (ans == false) {
-			if (touch(b, pipes.front())) {
-				ans = true;
-			}
-		}
-		pipes.push(pipes.front());
-		pipes.pop();
-	}
-	if (ans == true) {
-		b.die();
-		stop_all_pipes();
-	}
-	return;
-}
-
-void generate_pipe() {
-	int buf_y = rand() % (WINDOW_HEIGHT - 2 * MIN_DISTANCE_TO_WINDOW) + MIN_DISTANCE_TO_WINDOW;
-	if (pipes.empty()) {
-		pipes.push(pipe(WINDOW_LENGTH + STARTING_DISTANCE, buf_y - (HOLE_HEIGHT / 2), true));
-		pipes.push(pipe(WINDOW_LENGTH + STARTING_DISTANCE, buf_y + (HOLE_HEIGHT / 2), false));
-	}
-	if (pipes.back().x2 < WINDOW_LENGTH) {
-		double buf = pipes.back().x2;
-		pipes.push(pipe(buf + DISTANCE_BETWEEN_PIPES, buf_y - (HOLE_HEIGHT / 2), true));
-		pipes.push(pipe(buf + DISTANCE_BETWEEN_PIPES, buf_y + (HOLE_HEIGHT / 2), false));
-	}
-	return;
-}
-
-void delete_pipe() {
-	if (!pipes.empty()) {
-		if (pipes.front().x2 < 0) {
-			pipes.pop();
-			delete_pipe();
-		}
-	}
-	return;
-}
-
-void delete_all_pipes() {
-	while (!pipes.empty()) {
-		pipes.pop();
-	}
-}
-
-void stop_all_pipes() {
-	for (int i = 0; i < pipes.size(); ++i) {
-		pipes.front().stop();
-		pipes.push(pipes.front());
-		pipes.pop();
-	}
-	return;
-}
-
-void update_all_pipes() {
-	for (int i = 0; i < pipes.size(); ++i) {
-		pipes.front().next_tick();
-		pipes.push(pipes.front());
-		pipes.pop();
-	}
-	return;
-}
-
-void draw_all_pipes() {
-	for (int i = 0; i < pipes.size(); ++i) {
-		pipes.front().draw();
-		pipes.push(pipes.front());
-		pipes.pop();
-	}
-}
-
-void next_tick() {
-	bird.next_tick();
-	generate_pipe();
-	delete_pipe();
-	update_all_pipes();
-	bird_vresols(bird);
-	return;
-}
-
-void restart() {
-	bird.reset();
-	delete_all_pipes();
-	return;
-}
 
 int main()
 {
+
+
+
+	cout.setf(ios::fixed);
+	cout.precision(10);
 	srand(time(NULL));
 
-	bool pr_space = false;
-	bool now_space = false;
-	bool pr_r = false;
-	bool now_r = false;
-	pipe a(WINDOW_LENGTH / 3 * 2, WINDOW_HEIGHT / 2 - 100, true);
-	pipe b(WINDOW_LENGTH / 3 * 2, WINDOW_HEIGHT / 2 + 100, false);
-	while (window.isOpen())
-	{
-		// считывание пробела + прыжок
-		now_space = sf::Keyboard::isKeyPressed(sf::Keyboard::Space);
-		if (now_space == true && pr_space == false) {
-			bird.jump();
-		}
-		pr_space = now_space;
-		// мчитывание рестарта
-		now_r = sf::Keyboard::isKeyPressed(sf::Keyboard::R);
-		if (now_r == true && pr_r == false) {
-			restart();
-			bird.reset();
-		}
-		pr_r = now_r;
-		//_____________________________________________________________
-		next_tick();
+	network diana(str);
 
+	long double k = 3;
+	long double c = 23;
+
+
+
+	diana.print_network();
+
+	long long da = 1;
+
+	while (true)
+	{
+		int gr = 0;
+		for (int i = parametr.size() - 1; i >= 0; --i)
+		{
+			int buf;
+			buf = diana.learn({ parametr[i] }, { ans[i] });
+			//cout << buf << "\t";
+			gr += buf;
+			//diana.print_network();
+		}
+		cout << endl;
+		if (gr <= parametr.size())
+			break;
 		sf::Event event;
 		while (window.pollEvent(event))
 		{
 			if (event.type == sf::Event::Closed)
 				window.close();
 		}
-
-		// рисуем тута
-		window.clear(sf::Color::Black);
-
-		draw_all_pipes();
-		bird.draw();
-		//cout << pipes.size() << endl;
-
-		//for (int i = 0; i < pipes.size(); ++i) {
-		//	rectangle.setPosition(pipes.front().x1, pipes.front().y1);
-		//	rectangle.setSize(sf::Vector2f(pipes.front().x2 - pipes.front().x1, pipes.front().y2 - pipes.front().y1));
-		//	window.draw(rectangle);
-		//	//cout << pipes.front().x1 << " | " << pipes.front().x2 << " | " << pipes.front().y1 << " | " << pipes.front().y2 << endl;
-		//	pipes.push(pipes.front());
-		//	pipes.pop();
-		//}
-		//cout << pipes.size() << " | " << pipes.back().x2 << " | " << pipes.front().x2 << endl;
-
-		//sf::RectangleShape ground;
-		//ground.setPosition(0, Height - high_grass);
-		//ground.setSize(sf::Vector2f(Length, high_grass));
-		//ground.setFillColor(sf::Color(65, 25, 0));
-		//window.draw(ground);
-
-		//circle.setFillColor(sf::Color::Yellow);
-		//circle.setPosition(bird.x - bird.r, bird.y - bird.r);
-		//window.draw(circle);
-
-
-		window.display();
+		++da;
+		if (da % 1 == 0) {
+			diana.print_network();
+		}
 	}
 
-	return 0;
+	window.clear();
+
+	shape.setRadius(1);
+	shape.setFillColor(sf::Color::Green);
+
+	for (long double i = 0; i < LENGTH; i += 1)
+	{
+		long double x = (i - LENGTH / 2) / ZOOM;
+		long double y = diana.function({ x })[0];
+		shape.setPosition(x * ZOOM + LENGTH / 2, HEIGHT / 2 - y * ZOOM);
+		window.draw(shape);
+	}
+
+	shape.setRadius(3);
+	shape.setFillColor(sf::Color::Red);
+
+	for (int i = 0; i < parametr.size(); ++i)
+	{
+		long double x = parametr[i];
+		long double y = ans[i];
+		shape.setPosition(x * ZOOM + LENGTH / 2 - shape.getRadius() / 2, HEIGHT / 2 - y * ZOOM - shape.getRadius() / 2);
+		window.draw(shape);
+	}
+
+	window.display();
+
+	while (true) {
+		long double buf;
+		cin >> buf;
+		diana.setInput({ buf });
+		diana.calculate_network();
+		cout << buf * buf * k + c << " | ";
+		diana.print_answer();
+		sf::Event event;
+		while (window.pollEvent(event))
+		{
+			if (event.type == sf::Event::Closed)
+				window.close();
+		}
+	}
+
+	diana.print_network();
+
+	cout << "Hello World!\n";
 }
